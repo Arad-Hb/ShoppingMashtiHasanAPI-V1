@@ -19,47 +19,7 @@ namespace Application.Implementations
         {
             this.repo = repo;
         }
-        //public async Task<OperationResult> AddNewCategory(CategoryAddModel category)
-        //{
-        //    CategoryUpdateModel parent = null;
-        //    OperationResult op = new OperationResult("AddNewCategory");
-        //    int depth = 0;
-        //    if (category.ParentID==null) 
-        //    {
-        //        depth = 1;
-        //    }
-        //    if (category.ParentID!=null)
-        //    {
-        //         parent = await repo.GetCategory(category.ParentID.Value);
-        //        if (parent.Depth==3)
-        //        {
-        //            return new OperationResult("AddNewCategory").ToFail("this tree can hav maximum 3 depth",System.Net.HttpStatusCode.Forbidden);
-        //        }
-        //        depth = parent.Depth + 1;
-                
-        //    }
-        //    if (await repo.ExistCategoryName(category.CategoryName)) 
-        //    {
-        //        return op.ToFail("CatgoryName Already Exist",System.Net.HttpStatusCode.Conflict);
-        //    }
-
-        //   // category.Depth = depth;
-        //    var AddResult = await repo.AddNewCategory(category);
-        //    string l;
-        //    if (category.ParentID == null)
-        //    {
-        //        l = AddResult.RecordID.ToString() + ",";
-        //    }
-        //    else
-        //    {
-        //        l = parent.Lineage + AddResult.RecordID.ToString() + ",";
-        //    }
-        //    var r = await repo.SetLineAge(AddResult.RecordID.Value, l,depth);
-        //    return AddResult;
-
-
-        //}
-
+        
         public async Task<OperationResult> AssignFeatureToCategory(int CategoryID, int FeatureID)
         {
             OperationResult op = new OperationResult("AssignFeatureToCategory");
@@ -112,11 +72,7 @@ namespace Application.Implementations
 
         //public async Task<OperationResult> UpdateNewCategory(CategoryUpdateModel category)
         //{
-        //    OperationResult op = new OperationResult("UpdateNewCategory");
-        //    if (await repo.AsignedCurrentCategoryNameToAnotherCategory(category.CategoryID, category.CategoryName))
-        //    {
-        //        return op.ToFail("CategoryName Exist");
-        //    }
+        //    
 
         //    CategoryUpdateModel NewParentNode = null;
         //    int NewParentDepth=0;
@@ -183,6 +139,7 @@ namespace Application.Implementations
         public async Task<OperationResult> AddNewCategory(CategoryAddModel category)
         {
             OperationResult op = new OperationResult("AddNewCategory");
+            int depth = 0;
 
             //check valid categoryName
             if (await repo.ExistCategoryName(category.CategoryName))
@@ -191,6 +148,10 @@ namespace Application.Implementations
             }
 
             //check valid depth
+            if (category.ParentID == null)
+            {
+                depth = 1;
+            }
             if (category.ParentID != null)
             {
                 CategoryUpdateModel parent = await repo.GetCategory(category.ParentID.Value);
@@ -198,9 +159,11 @@ namespace Application.Implementations
                 {
                     return new OperationResult("AddNewCategory").ToFail("this tree can hav maximum 3 depth", System.Net.HttpStatusCode.Forbidden);
                 }
+                depth = parent.Depth + 1;
             }
 
             //add new category
+            category.Depth = depth;
             var AddResult = await repo.AddNewCategory(category);
 
             return AddResult;
@@ -211,21 +174,27 @@ namespace Application.Implementations
             OperationResult op = new OperationResult("UpdateNewCategory");
 
             var OldNode = await repo.GetCategory(category.CategoryID);
+            category.Depth =OldNode.Depth;
             List<int> childrenIDs = await repo.GetChildren(category.CategoryID);
-
             CategoryUpdateModel NewParentNode = null;
 
             //check if category name already exists
             if (await repo.AsignedCurrentCategoryNameToAnotherCategory(category.CategoryID, category.CategoryName))
             {
-                return op.ToFail("CategoryName Exist",category.CategoryID);
+                return op.ToFail("CategoryName Exists",category.CategoryID);
             }
 
 
             //check if ParentId has been changed
             if (OldNode.ParentID != category.ParentID) 
             {
-                NewParentNode = await repo.GetCategory(category.ParentID ?? 0);
+                //check if new parentId==null
+                if (category.ParentID==null || category.ParentID==0)
+                {
+                    category.Depth = 1;
+                }
+                
+                NewParentNode = await repo.GetCategory((int)category.ParentID);
                 int MaxChildrenRelativeDepth = await repo.GetChildNodeLevels(category.CategoryID);
 
                 //check if depth was more than 3
@@ -235,33 +204,28 @@ namespace Application.Implementations
                 }
 
                 //check if new parentNode.Id exists in childrens arrey
-                if (childrenIDs.Count>0 && childrenIDs.Contains(NewParentNode.CategoryID))
+                if (childrenIDs.Count > 0 && childrenIDs.Contains(NewParentNode.CategoryID))
                 {
                     return op.ToFail("invalid parent id", category.CategoryID);
                 }
-
-                //check if ParentId is null and the category must be root
-                //if (category.ParentID == null)
-                //{
-                //    finalLineage = await repo.GetLineageString(category.CategoryID);
-                //    finalDepth = finalLineage.Count(c => c == ',');
-                //}
-
+                category.Depth = NewParentNode.Depth + 1;
             }
+
             
             var updateNewNode = await repo.UpdateNewCategory(category);
 
-            //set new lineage and depth for childrens
-            if (updateNewNode.Success)
-            {
-                foreach (var childID in childrenIDs)
-                {
-                    await repo.AssignLineAgeAndDepthToCategory(childID);
-                }
-            }
+            //update lineage and depth for childrens
+            //if (updateNewNode.Success)
+            //{
+            //    //await repo.UpdateDescendantsDepthAndLineageAsync(category.CategoryID);
+
+            //    foreach (var childID in childrenIDs)
+            //    {
+            //        await repo.AssignLineAgeAndDepthToCategory(childID);
+            //    }
+            //}
 
             return updateNewNode;
-   
         }
     }
 }

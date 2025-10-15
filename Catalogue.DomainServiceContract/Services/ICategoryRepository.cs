@@ -42,7 +42,8 @@ namespace Catalogue.DomainServiceContract.Services
 
         Task<string> GetLineageString(int categoryId);
         Task<OperationResult> AssignLineAgeAndDepthToCategory(int CategoryID);
-        Task<string> CalculateLineage(Category cat);
+        string CalculateLineage(Category cat);
+        Task<bool> UpdateDescendantsDepthAndLineageAsync(int categoryId);
 
 
     }

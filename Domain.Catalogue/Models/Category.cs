@@ -9,7 +9,7 @@ namespace Catalogue.Domain.Models
     public class Category
     {
         public int CategoryID { get; set; }
-        public int? Depth { get; set; }
+        public int Depth { get; set; }
         public string CategoryName { get; set; }
         public string CategoryDescription { get; set; }
         public int? ParentID { get; set; }

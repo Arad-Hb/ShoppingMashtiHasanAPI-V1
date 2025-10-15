@@ -3,6 +3,7 @@ using Catalogue.Domain.Models;
 using Catalogue.Domain.Product;
 using Catalogue.DomainServiceContract.Services;
 using Framework.Domain.BaseModel;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -17,39 +18,13 @@ namespace Infrastructure.Catalogue.EF.Persistence.Repositories
     public class CategoryRepository : ICategoryRepository
     {
         private readonly CatalogueContext db;
-        //public Category ToDBModel(CategoryAddModel category)
-        //{
-        //    return new Category
-                
-        //    {
-        //        CategoryDescription = category.CategoryDescription,
-        //    CategoryName = category.CategoryName,
-        //    Lineage = string.Empty,
-        //    ParentID = category.ParentID,
 
-        //    };
-        //}
         public CategoryRepository(CatalogueContext db)
         {
 
             this.db = db;
 
         }
-        //public async Task<OperationResult> AddNewCategory(CategoryAddModel category)
-        //{
-        //    OperationResult op = new OperationResult("Add_New_Category");
-        //    try
-        //    {
-        //        var cat = ToDBModel(category);
-        //        db.Categories.Add(cat);
-        //        await db.SaveChangesAsync();
-        //        return op.ToSuccess("Category Added Successfully", cat.CategoryID);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return op.ToFail("Category Added Failed " + ex.Message);
-        //    }
-        //}
 
         public async Task<OperationResult> AssignFeatureToCategory(int CategoryID, int FeatureID)
         {
@@ -109,25 +84,13 @@ namespace Infrastructure.Catalogue.EF.Persistence.Repositories
             {
                 CategoryUpdateModel cat = new CategoryUpdateModel
                 {
-                    //BodyExtraData = c.BodyExtraData
-           
-                    CategoryID = CategoryID
-           ,
-                    CategoryDescription = c.CategoryDescription
-           ,
-                    CategoryName = c.CategoryName
-         
-           ,
-                    Lineage = c.Lineage
-           
-           
-          
-           
-           ,
-                    ParentID = c.ParentID
-          
-           ,
-                    Depth = c.Depth ?? 0
+                    CategoryID = CategoryID,
+                    CategoryDescription = c.CategoryDescription,
+                    CategoryName = c.CategoryName,
+                    Lineage = c.Lineage,
+                    ParentID = c.ParentID,
+                    Depth=c.Depth
+                    
                 };
                 return cat;
             }
@@ -138,8 +101,6 @@ namespace Infrastructure.Catalogue.EF.Persistence.Repositories
            
         }
         
-
-
         public async Task<int> GetChildeCount(int CategoryID)
         {
             return await  db.Categories.CountAsync(x=>x.ParentID== CategoryID);
@@ -201,31 +162,6 @@ namespace Infrastructure.Catalogue.EF.Persistence.Repositories
 
         }
 
-        //public async Task<OperationResult> UpdateNewCategory(CategoryUpdateModel category)
-        //{
-        //    OperationResult op = new OperationResult("UpdateNewCategory");
-        //    try
-        //    {
-        //        var c = await db.Categories.FirstOrDefaultAsync(x => x.CategoryID == category.CategoryID);
-        //        c.CategoryDescription = category.CategoryDescription;
-        //        c.CategoryName = category.CategoryName;
-              
-                
-        //        c.ParentID = category.ParentID;
-
-        //        //TO DO SET LINEAGE
-        //      // c.Lineage = category.Lineage;
-             
-        //        await db.SaveChangesAsync();
-        //        return op.ToSuccess("Update Successfully",c.CategoryID);
-        //    }
-        //    catch 
-        //    {
-
-        //        return op.ToFail("Update Failed",category.CategoryID);
-        //    }
-        //}
-
         public async Task<bool> ExistCategoryFeature(int CategoryID, int FeatureID)
         {
             return await db.CategoryFeatures.AnyAsync(x => x.CategoryID == CategoryID && x.FeatureID == FeatureID);
@@ -273,39 +209,6 @@ namespace Infrastructure.Catalogue.EF.Persistence.Repositories
             }
 
         }
-
-        /// <summary>
-        /// این تابع تعیین میکند ماکزیمم عمق نسبی فرزندان یک نود را نسبت به خودش
-        /// </summary>
-        /// <param name="CategoryID"></param>
-        /// <returns></returns>
-        //public async Task<int> GetChildNodeLevels(int CategoryID)
-        //{
-        //    var node = await db.Categories
-        //        .FirstOrDefaultAsync(x => x.CategoryID == CategoryID);
-        //    int maxdepth = await db.Categories.Where(x => x.Lineage.StartsWith(node.Lineage)).MaxAsync(x => x.Depth) ??0;
-        //    var MaxChildDepth = maxdepth - node.Depth.Value;
-        //    return MaxChildDepth;
-        //}
-
-
-        //public async Task AssignLineAgeAndDepthToCategory(int CategoryID, string Lineage, int depth)
-        //{
-        //    var cat = await db.Categories.FirstOrDefaultAsync(x => x.CategoryID == CategoryID);
-        //    cat.Lineage = Lineage;
-        //    cat.Depth = depth;
-        //    await db.SaveChangesAsync();
-        //}
-
-        //public async Task<List<Category>> GetChildren(int CategoryID)
-        //{
-        //    var node = await db.Categories.FirstOrDefaultAsync(x => x.CategoryID == CategoryID);
-
-        //    var cats = await db.Categories.Where(x => x.Lineage.StartsWith(node.Lineage)).ToListAsync();
-        //    return cats;
-
-
-        //}
 
         public List<CategoryWithLevels> GetAllChildWithRelativeLevels(int CategoryID)
         {
@@ -362,6 +265,7 @@ OPTION (MAXRECURSION 4);";
                 CategoryDescription = category.CategoryDescription,
                 CategoryName = category.CategoryName,
                 Lineage = string.Empty,
+                Depth = category.Depth,
                 ParentID = category.ParentID??null
             };
         }
@@ -375,10 +279,8 @@ OPTION (MAXRECURSION 4);";
                 db.Categories.Add(cat);
                 await db.SaveChangesAsync();
 
-                cat.Lineage = await CalculateLineage(cat);
-                cat.Depth = cat.Lineage.Count(x => x == ',');
-
-                //db.Categories.Update(cat);
+                cat.Lineage = CalculateLineage(cat);
+                db.Categories.Update(cat);
                 await db.SaveChangesAsync();
 
                 await transaction.CommitAsync();
@@ -397,15 +299,16 @@ OPTION (MAXRECURSION 4);";
             using var transaction = await db.Database.BeginTransactionAsync();
             try
             {
-                var c = await db.Categories.FirstOrDefaultAsync(x => x.CategoryID == category.CategoryID);
+                Category c = await db.Categories.FirstOrDefaultAsync(x => x.CategoryID == category.CategoryID);
                 c.CategoryDescription = category.CategoryDescription;
                 c.CategoryName = category.CategoryName;
                 c.ParentID = category.ParentID;
+                c.Depth = category.Depth;
 
                 await db.SaveChangesAsync();
 
-                c.Lineage = await CalculateLineage(c);
-                c.Depth = c.Lineage.Count(x => x == ',');
+                c.Lineage = CalculateLineage(c);
+                
 
                 db.Categories.Update(c);
                 await db.SaveChangesAsync();
@@ -429,7 +332,7 @@ OPTION (MAXRECURSION 4);";
         }
 
 
-        public async Task<string> CalculateLineage(Category cat)
+        public string CalculateLineage(Category cat)
         {
             string lineage = string.Empty;
 
@@ -449,7 +352,7 @@ OPTION (MAXRECURSION 4);";
             try
             {
                 var cat = await db.Categories.FirstOrDefaultAsync(x => x.CategoryID == CategoryID);
-                cat.Lineage = await CalculateLineage(cat);
+                cat.Lineage = this.CalculateLineage(cat);
                 cat.Depth = cat.Lineage.Count(c => c == ',');
                 await db.SaveChangesAsync();
                 return op.ToSuccess("assigning lineages and depth was successfull",CategoryID);
@@ -477,11 +380,67 @@ OPTION (MAXRECURSION 4);";
         public async Task<int> GetChildNodeLevels(int CategoryID)
         {
             var node = await db.Categories.FirstOrDefaultAsync(x => x.CategoryID == CategoryID);
-            int maxdepth = await db.Categories.Where(x => x.Lineage.StartsWith(node.Lineage)).MaxAsync(x => x.Depth) ?? 0;
-            var MaxChildDepth = maxdepth - (node.Depth.Value);
+            int maxdepth = await db.Categories.Where(x => x.Lineage.StartsWith(node.Lineage)).MaxAsync(x => x.Depth);
+            var MaxChildDepth = maxdepth - (node.Depth);
             return MaxChildDepth;
         }
 
 
+public async Task<bool> UpdateDescendantsDepthAndLineageAsync(int categoryId)
+    {
+            try
+            {
+                var sql = @"
+        ;WITH DescendantsCTE AS (
+            -- Anchor
+            SELECT
+                c.CategoryID,
+                c.ParentID,
+                c.Depth,
+                c.Lineage
+            FROM Categories AS c
+            WHERE c.CategoryID = @RootId
+        
+            UNION ALL
+        
+            -- Recursive
+            SELECT
+                child.CategoryID,
+                child.ParentID,
+                p.Depth + 1 AS Depth,
+                CASE
+                    WHEN p.Lineage IS NULL OR p.Lineage = '' THEN CAST(child.CategoryID AS VARCHAR(255))
+                    ELSE p.Lineage + '/' + CAST(child.CategoryID AS VARCHAR(255))
+                END AS Lineage
+            FROM Categories AS child
+            INNER JOIN DescendantsCTE AS p
+                ON child.ParentID = p.CategoryID
+        )
+        UPDATE c
+        SET c.Depth = d.Depth,
+            c.Lineage = d.Lineage
+        FROM Categories AS c
+        INNER JOIN DescendantsCTE AS d ON c.CategoryID = d.CategoryID;
+        ";
+
+                await using var conn = db.Database.GetDbConnection();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = sql;
+                cmd.CommandType = System.Data.CommandType.Text;
+                cmd.Parameters.Add(new SqlParameter("@RootId", categoryId));
+
+                if (conn.State != System.Data.ConnectionState.Open)
+                    await conn.OpenAsync();
+
+                var affected = await cmd.ExecuteNonQueryAsync();
+                return affected > 0;
+
+            }
+            catch (Exception ex) 
+            {
+            throw new Exception(ex.Message);
+            }
+       
     }
+}
 }
